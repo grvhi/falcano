@@ -17,6 +17,8 @@ import boto3
 import boto3.dynamodb.types as dynamo_types
 from boto3.dynamodb.conditions import ConditionExpressionBuilder
 import botocore
+from botocore.config import Config
+
 from falcano.settings import get_settings_value
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
@@ -31,26 +33,37 @@ from falcano.expressions.update import Update
 from falcano.expressions.projection import create_projection_expression
 
 from falcano.constants import (
-    BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH,
-    BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS, ITEM,
-    WRITE_CAPACITY_UNITS, PROJECTION, INDEX_NAME, PROJECTION_TYPE, PAY_PER_REQUEST_BILLING_MODE,
-    ATTRIBUTES, META_CLASS_NAME, REGION, HOST, ATTR_DEFINITIONS, KEY_SCHEMA, KEY_TYPE, TABLE_NAME,
-    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, HASH_KEY, CONDITION_EXPRESSION,
-    REQUEST_ITEMS, UPDATE_EXPRESSION, EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES,
-    RETURN_VALUES, ALL_NEW, KEY, RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS,
-    TRANSACT_CONDITION_CHECK, TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE, RETURN_VALUES_VALUES,
-    RETURN_VALUES_ON_CONDITION_FAILURE, RETURN_VALUES_ON_CONDITION_FAILURE_VALUES, TRANSACT_GET,
-    TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY, PROJECTION_EXPRESSION, CONSISTENT_READ,
-    KEY_CONDITION_EXPRESSION, FILTER_EXPRESSION, SELECT, ALL_PROJECTED_ATTRIBUTES,
-    SCAN_INDEX_FORWARD, LIMIT, EXCLUSIVE_START_KEY,SPECIFIC_ATTRIBUTES,
-    RETURN_ITEM_COLL_METRICS_VALUES, RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY_VALUES,
+    BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE,
+    RANGE, HASH,
+    BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES,
+    READ_CAPACITY_UNITS, ITEM,
+    WRITE_CAPACITY_UNITS, PROJECTION, INDEX_NAME, PROJECTION_TYPE,
+    PAY_PER_REQUEST_BILLING_MODE,
+    ATTRIBUTES, META_CLASS_NAME, REGION, HOST, ATTR_DEFINITIONS, KEY_SCHEMA,
+    KEY_TYPE, TABLE_NAME,
+    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, HASH_KEY,
+    CONDITION_EXPRESSION,
+    REQUEST_ITEMS, UPDATE_EXPRESSION, EXPRESSION_ATTRIBUTE_NAMES,
+    EXPRESSION_ATTRIBUTE_VALUES,
+    RETURN_VALUES, ALL_NEW, KEY, RESPONSES, BATCH_GET_PAGE_LIMIT,
+    UNPROCESSED_KEYS, KEYS,
+    TRANSACT_CONDITION_CHECK, TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE,
+    RETURN_VALUES_VALUES,
+    RETURN_VALUES_ON_CONDITION_FAILURE,
+    RETURN_VALUES_ON_CONDITION_FAILURE_VALUES, TRANSACT_GET,
+    TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY, PROJECTION_EXPRESSION,
+    CONSISTENT_READ,
+    KEY_CONDITION_EXPRESSION, FILTER_EXPRESSION, SELECT,
+    ALL_PROJECTED_ATTRIBUTES,
+    SCAN_INDEX_FORWARD, LIMIT, EXCLUSIVE_START_KEY, SPECIFIC_ATTRIBUTES,
+    RETURN_ITEM_COLL_METRICS_VALUES, RETURN_ITEM_COLL_METRICS,
+    RETURN_CONSUMED_CAPACITY_VALUES,
     TABLE_KEY, TABLE_STATUS, ITEMS, ACTION, NONE
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
 
 _KeyType = Any
-
 
 ATTR_MAP = {
     REGION: 'region',
@@ -102,7 +115,8 @@ class MetaModel(AttributeContainerMeta):
                         if ATTR_MAP[attr] is None:
                             setattr(attr_obj, attr, None)
                             continue
-                        setattr(attr_obj, attr, get_settings_value(ATTR_MAP[attr]))
+                        setattr(attr_obj, attr,
+                                get_settings_value(ATTR_MAP[attr]))
             elif isinstance(attr_obj, Index):
                 attr_obj.Meta.model = m_cls
                 if not hasattr(attr_obj.Meta, "index_name"):
@@ -112,14 +126,18 @@ class MetaModel(AttributeContainerMeta):
                     attr_obj.attr_name = attr_name
 
         ttl_attr_names = [name for name,
-                          attr_obj in attrs.items() if isinstance(attr_obj, TTLAttribute)]
+                                   attr_obj in attrs.items() if
+                          isinstance(attr_obj, TTLAttribute)]
         if len(ttl_attr_names) > 1:
-            raise ValueError("The model has more than one TTL attribute: {}".format(
-                ", ".join(ttl_attr_names)))
+            raise ValueError(
+                "The model has more than one TTL attribute: {}".format(
+                    ", ".join(ttl_attr_names)))
 
-        cls.store_parent_classes(m_cls)  # pylint: disable=no-value-for-parameter
+        cls.store_parent_classes(
+            m_cls)  # pylint: disable=no-value-for-parameter
 
-    def store_parent_classes(self, cls):  # pylint: disable=no-self-use, bad-mcs-method-argument
+    def store_parent_classes(self,
+                             cls):  # pylint: disable=no-self-use, bad-mcs-method-argument
         '''
         Add this as a child to all parent class models, recursively if it has a model_type
         '''
@@ -157,7 +175,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
                  hash_key: Optional[_KeyType] = None,
                  range_key: Optional[_KeyType] = None,
                  _user_instantiated: bool = True,
-                 **attributes: Any,):
+                 **attributes: Any, ):
         if hash_key is not None:
             attributes[self.get_hash_key().attr_name] = hash_key
         if range_key is not None:
@@ -174,39 +192,48 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         del self.__dict__['attribute_values'][name]
         return super().__delattr__(name)
 
-    class Meta(): # pylint: disable=too-few-public-methods
-        '''
+    class Meta:
+        """
         Meta class for the Model
-        '''
+        """
         max_pool_connections = 20
         connect_timeout_seconds = 10
         read_timeout_seconds = 5
         billing_mode = PAY_PER_REQUEST_BILLING_MODE
         table_name = os.getenv('DYNAMODB_TABLE')
         host = os.getenv('ENDPOINT_URL', None)
+        profile_name = None
+        region_name = None
         _table = None
         separator = '#'
         model_type = 'Type'
 
         @property
         def table(self):
-            '''
+            """
             Table property getter
-            '''
+            """
             return self._table
 
         @table.setter
         def table(self, name):
-            '''
+            """
             Setter for the table name
-            '''
-            dynamodb = boto3.client('dynamodb', endpoint_url=self.host)
+            """
+            session = boto3.session.Session(
+                profile_name=self.profile_name
+            )
+            dynamodb = session.client(
+                'dynamodb',
+                endpoint_url=self.host,
+                region_name=self.region_name
+            )
             self._table = dynamodb.Table(name)
 
     def _set_defaults(self, _user_instantiated: bool = True) -> None:
-        '''
+        """
         Sets and fields that provide a default value
-        '''
+        """
         for name, attr in self.get_attributes():
             if _user_instantiated and attr.default_for_new is not None:
                 default = attr.default_for_new
@@ -219,10 +246,12 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
             if value is not None:
                 setattr(self, name, value)
 
-    def initialize_attributes(self, _user_instantiated: bool, **attributes: Attribute):
-        '''
+    def initialize_attributes(self,
+                              _user_instantiated: bool,
+                              **attributes: Attribute):
+        """
         Initialize the attributes of the Model
-        '''
+        """
         self._attributes = self.get_attributes()
         self._set_defaults(_user_instantiated=_user_instantiated)
         keys = []
@@ -236,14 +265,16 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
         for attr_name, attr_value in attributes.items():
             if attr_name not in keys:
-                raise ValueError(f'Attribute {attr_name} specified does not exist')
+                raise ValueError(
+                    f'Attribute {attr_name} specified does not exist'
+                )
             setattr(self, attr_name, attr_value)
 
     @classmethod
     def get_attributes(cls) -> List[Tuple[str, Attribute]]:
-        '''
+        """
         Get attributes of the calling class for dynamodb
-        '''
+        """
         members = getmembers(cls, lambda o: isinstance(o, Attribute))
         # for name, member in members:
         #     if not member.attr_name:
@@ -251,20 +282,20 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         return members
 
     @classmethod
-    def get_attribute(cls, name) -> Attribute:
-        '''
+    def get_attribute(cls, name) -> Optional[Attribute]:
+        """
         Get a single attribute by the name
-        '''
+        """
         for tup in cls.get_attributes():
             if tup[0] == name:
                 return tup[1]
         return None
 
     @classmethod
-    def get_hash_key(cls) -> Attribute:
-        '''
+    def get_hash_key(cls) -> Optional[Attribute]:
+        """
         Get the hash key
-        '''
+        """
         members = cls.get_attributes()
         for _, member in members:
             if member.is_hash_key:
@@ -272,10 +303,10 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         return None
 
     @classmethod
-    def get_range_key(cls) -> Attribute:
-        '''
+    def get_range_key(cls) -> Optional[Attribute]:
+        """
         Get the range key
-        '''
+        """
         members = cls.get_attributes()
         for _, member in members:
             if member.is_range_key:
@@ -284,14 +315,18 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def connection(cls):
-        '''
+        """
         Returns a (cached) connection
-        '''
+        """
         if cls._connection is None:
-            cls._connection = boto3.client(
+            session = boto3.session.Session(
+                profile_name=cls.Meta.profile_name
+            )
+            cls._connection = session.client(
                 'dynamodb',
                 endpoint_url=cls.Meta.host,
-                config=botocore.config.Config(
+                region_name=cls.Meta.region_name,
+                config=Config(
                     max_pool_connections=cls.Meta.max_pool_connections,
                     connect_timeout=cls.Meta.connect_timeout_seconds,
                     read_timeout=cls.Meta.read_timeout_seconds,
@@ -301,17 +336,18 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def resource(cls):
-        '''
+        """
         Returns a (cached) connection
-        '''
+        """
 
         if cls._resource is None:
-            # attr = getattr(cls, cls.Meta.model_type)
-            # cls._models[attr.default] = cls
-            cls._resource = boto3.resource(
+            session = boto3.session.Session(
+                profile_name=cls.Meta.profile_name
+            )
+            cls._resource = session.resource(
                 'dynamodb',
                 endpoint_url=cls.Meta.host,
-                config=botocore.config.Config(
+                config=Config(
                     max_pool_connections=cls.Meta.max_pool_connections,
                     connect_timeout=cls.Meta.connect_timeout_seconds,
                     read_timeout=cls.Meta.read_timeout_seconds,
@@ -321,9 +357,9 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def _get_indexes(cls) -> Dict[str, Dict]:
-        '''
+        """
         Returns a list of the secondary indexes
-        '''
+        """
         if cls._indexes is None:
             cls._indexes = {
                 ATTR_DEFINITIONS: []
@@ -341,15 +377,19 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
                 }
                 if isinstance(index, GlobalSecondaryIndex):
-                    if getattr(cls.Meta, stringcase.snakecase(BILLING_MODE), None) != PAY_PER_REQUEST_BILLING_MODE: # pylint: disable=line-too-long
+                    if getattr(cls.Meta, stringcase.snakecase(BILLING_MODE),
+                               None) != PAY_PER_REQUEST_BILLING_MODE:
                         idx[PROVISIONED_THROUGHPUT] = {
                             READ_CAPACITY_UNITS: index.Meta.read_capacity_units,
-                            WRITE_CAPACITY_UNITS: index.Meta.write_capacity_units
+                            WRITE_CAPACITY_UNITS:
+                                index.Meta.write_capacity_units
                         }
                 cls._indexes.get(ATTR_DEFINITIONS).extend(
                     schema.get(ATTR_DEFINITIONS))
                 if index.Meta.projection.non_key_attributes:
-                    idx[PROJECTION][NON_KEY_ATTRIBUTES] = index.Meta.projection.non_key_attributes
+                    idx[PROJECTION][NON_KEY_ATTRIBUTES] = (
+                        index.Meta.projection.non_key_attributes
+                    )
                 if isinstance(index, GlobalSecondaryIndex):
                     cls._indexes.setdefault(GLOBAL_SECONDARY_INDEXES, [])
                     cls._indexes.get(GLOBAL_SECONDARY_INDEXES).append(idx)
@@ -360,9 +400,9 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def get_schema(cls):
-        '''
+        """
         Returns the schema for this table
-        '''
+        """
         schema: Dict[str, List] = {
             ATTR_DEFINITIONS: [],
             KEY_SCHEMA: [],
@@ -389,19 +429,22 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         return schema
 
     @classmethod
-    def create_table(cls, wait: bool = False): # pylint: disable=too-many-branches
-        '''
+    def create_table(cls,
+                     wait: bool = False):  # pylint: disable=too-many-branches
+        """
         Create a table in DynamoDB
-        '''
+        """
         logger.debug('CREATE THE TABLE')
 
         schema = cls.get_schema()
 
         index_data = cls._get_indexes()
         if index_data.get(GLOBAL_SECONDARY_INDEXES) is not None:
-            schema[GLOBAL_SECONDARY_INDEXES] = index_data.get(GLOBAL_SECONDARY_INDEXES)
+            schema[GLOBAL_SECONDARY_INDEXES] = index_data.get(
+                GLOBAL_SECONDARY_INDEXES)
         if index_data.get(LOCAL_SECONDARY_INDEXES) is not None:
-            schema[LOCAL_SECONDARY_INDEXES] = index_data.get(LOCAL_SECONDARY_INDEXES)
+            schema[LOCAL_SECONDARY_INDEXES] = index_data.get(
+                LOCAL_SECONDARY_INDEXES)
         index_attrs = index_data.get(ATTR_DEFINITIONS)
         attr_keys = [attr[ATTR_NAME] for attr in schema[ATTR_DEFINITIONS]]
         for attr in index_attrs:
@@ -422,27 +465,27 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         if wait:
             while True:
                 try:
-                    response = cls.connection().describe_table(TableName=cls.Meta.table_name)
+                    response = cls.connection().describe_table(
+                        TableName=cls.Meta.table_name)
                     status = response[TABLE_KEY][TABLE_STATUS]
-                    if status in ('CREATING', 'UPDATING', 'DELETING', 'ARCHIVING'):
+                    if status in (
+                            'CREATING', 'UPDATING', 'DELETING', 'ARCHIVING'):
                         time.sleep(2)
                     else:
                         break
                 except botocore.exceptions.ClientError as error:
-                    if error.response['Error']['Code'] == 'ResourceNotFoundException':
+                    if error.response['Error'][
+                        'Code'] == 'ResourceNotFoundException':
                         raise KeyError(
                             'There is no table %s, only Zuul' % cls.Meta.table_name
                         ) from error
                     raise error
 
     @classmethod
-    def scan(
-        cls,
-        **kwargs
-    ):
-        '''
+    def scan(cls, **kwargs):
+        """
         Provides a high level scan API
-        '''
+        """
         table = cls.resource().Table(cls.Meta.table_name)
         kwargs = cls.get_operation_kwargs_from_class(**kwargs)
         response = table.scan(**kwargs)
@@ -453,14 +496,14 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def get(
-        cls,
-        hash_key,
-        range_key=None,
-        **kwargs
+            cls,
+            hash_key,
+            range_key=None,
+            **kwargs
     ):
-        '''
+        """
         Provides a high level get_item API
-        '''
+        """
         table = cls.resource().Table(cls.Meta.table_name)
         kwargs['add_identifier_map'] = True
         kwargs['serialize'] = False
@@ -475,15 +518,15 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def batch_get(
-        cls,
-        items,
-        **kwargs
+            cls,
+            items,
+            **kwargs
     ):
-        '''
+        """
         Provides a high level batch_get_item API
 
         :param items: contains a list of dicts of primary/sort key-value pairs
-        '''
+        """
         hash_key_attribute = cls.get_hash_key()
         range_key_attribute = cls.get_range_key()
         keys_to_get: List[Any] = []
@@ -491,7 +534,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         while items:
             item = items.pop()
             if range_key_attribute:
-                hash_key, range_key = cls._serialize_keys(item[0], item[1])  # type: ignore
+                hash_key, range_key = cls._serialize_keys(item[0], item[
+                    1])  # type: ignore
                 keys_to_get.append({
                     hash_key_attribute.attr_name: hash_key,
                     range_key_attribute.attr_name: range_key
@@ -541,9 +585,9 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def exists(cls) -> bool:
-        '''
+        """
         Returns True if this table exists, False otherwise
-        '''
+        """
         try:
             cls.connection().describe_table(TableName=cls.Meta.table_name)
             return True
@@ -576,10 +620,10 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         :param last_evaluated_key: If set, provides the starting point for query.
         :param page_size: Page size of the query to DynamoDB
         '''
-        select=None
+        select = None
         if index_name:
             hash_attr = index_name.hash_key_attribute()
-            select=ALL_PROJECTED_ATTRIBUTES
+            select = ALL_PROJECTED_ATTRIBUTES
         else:
             hash_attr = cls.get_hash_key()
 
@@ -608,34 +652,27 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         return Results(Model, response)
 
     def serialize(self, attr_map=False, null_check=True) -> Dict[str, Any]:
-        '''
+        """
         Serializes all model attributes for use with DynamoDB
         :param attr_map: If True, then attributes are returned
         :param null_check: If True, then attributes are checked for null
-        '''
+        """
         attrs: Dict[str, Dict] = {ATTRIBUTES: {}}
         for name, attr in self.get_attributes():
             value = getattr(self, name)
             if isinstance(value, MapAttribute):
                 if not value.validate():
-                    raise ValueError("Attribute '{}' is not correctly typed".format(attr.attr_name))
-
-            if value is None:
-                continue
+                    raise ValueError(
+                        f"Attribute '{attr.attr_name}' is not correctly typed"
+                    )
             serialized = attr.serialize(value)
             if serialized is None and not attr.null and null_check:
                 raise ValueError(f"Attribute '{attr.attr_name}' cannot be None")
-
-            if attr_map:
-                logger.warning('Unsupported argument: attr_map')
-
             if attr.is_hash_key:
                 attrs[HASH] = serialized
             if attr.is_range_key:
                 attrs[RANGE] = serialized
-
             attrs[ATTRIBUTES][attr.attr_name] = serialized
-
         return attrs
 
     def get_keys(self):
@@ -666,7 +703,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         return serialized
 
     @classmethod
-    def _serialize_keys(cls, hash_key, range_key=None) -> Tuple[_KeyType, _KeyType]:
+    def _serialize_keys(cls, hash_key, range_key=None) -> Tuple[
+        _KeyType, _KeyType]:
         '''
         Serializes the hash and range keys
         :param hash_key: The hash key value
@@ -703,7 +741,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
         This covers cases where an attribute name has been overridden via 'attr_name'.
         '''
-        return cls._dynamo_to_python_attrs.get(dynamo_key, dynamo_key)  # type: ignore
+        return cls._dynamo_to_python_attrs.get(dynamo_key,
+                                               dynamo_key)  # type: ignore
 
     @classmethod
     def transact_write(cls):
@@ -743,7 +782,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
             'condition': condition
         }
         table = self.resource().Table(self.Meta.table_name)
-        kwargs = self.get_operation_kwargs_from_instance(**kwargs) # pylint: disable=unexpected-keyword-arg
+        kwargs = self.get_operation_kwargs_from_instance(
+            **kwargs)  # pylint: disable=unexpected-keyword-arg
         return table.delete_item(**kwargs)
 
     def update(self, actions, condition=None, return_values=None):
@@ -751,7 +791,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         Updates an item using the UpdateItem operation.
         '''
         if not isinstance(actions, list) or len(actions) == 0:
-            raise TypeError('the value of `actions` is expected to be a non-empty list')
+            raise TypeError(
+                'the value of `actions` is expected to be a non-empty list')
 
         kwargs = {
             stringcase.snakecase(RETURN_VALUES):
@@ -761,7 +802,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
             'condition': condition
         }
 
-        kwargs = self.get_operation_kwargs_from_instance(**kwargs) # pylint: disable=unexpected-keyword-arg
+        kwargs = self.get_operation_kwargs_from_instance(
+            **kwargs)  # pylint: disable=unexpected-keyword-arg
         table = self.resource().Table(self.Meta.table_name)
         res = table.update_item(**kwargs)[ATTRIBUTES]
         return Model.models[res[self.Meta.model_type]](**res)
@@ -774,7 +816,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
             'item': True,
             'condition': condition
         }
-        kwargs = self.get_operation_kwargs_from_instance(**kwargs) # pylint: disable=unexpected-keyword-arg
+        kwargs = self.get_operation_kwargs_from_instance(
+            **kwargs)  # pylint: disable=unexpected-keyword-arg
         table = self.resource().Table(self.Meta.table_name)
         data = table.put_item(**kwargs)
         return data
@@ -791,7 +834,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         ret_dict['ID'] = ret_dict[primary_key].split(self.Meta.separator)[-1]
         return ret_dict
 
-    def _attr2obj(self, attr): # pylint: disable=too-many-return-statements,too-many-branches
+    def _attr2obj(self,
+                  attr):  # pylint: disable=too-many-return-statements,too-many-branches
         '''Turn a pynamo Attribute into a dict'''
         if isinstance(attr, list):
             _list = []
@@ -862,28 +906,30 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         if RANGE in serialized:
             kwargs[stringcase.snakecase(RANGE_KEY)] = serialized.get(RANGE)
         if attributes:
-            kwargs[stringcase.snakecase(ATTRIBUTES)] = serialized.get(ATTRIBUTES)
+            kwargs[stringcase.snakecase(ATTRIBUTES)] = serialized.get(
+                ATTRIBUTES)
         if item:
             kwargs[stringcase.snakecase(ITEM)] = serialized.get(ATTRIBUTES)
         return kwargs
 
-    def get_operation_kwargs_from_instance(  # pylint: disable=too-many-branches,too-many-arguments
-        self,
-        key: str = KEY,
-        actions=None,
-        condition=None,
-        return_values=None,
-        return_values_on_condition_failure=None,
-        serialize=False,
-        add_identifier_map=False,
-        item=False
+    def get_operation_kwargs_from_instance(
+            # pylint: disable=too-many-branches,too-many-arguments
+            self,
+            key: str = KEY,
+            actions=None,
+            condition=None,
+            return_values=None,
+            return_values_on_condition_failure=None,
+            serialize=False,
+            add_identifier_map=False,
+            item=False
     ) -> Dict[str, Any]:
         '''
         Gets the arguments for a DB operation from a model instance
         '''
         is_update = actions is not None
         save_kwargs = self._get_save_args(
-                item=item, attributes=True, null_check=not is_update)
+            item=item, attributes=True, null_check=not is_update)
 
         # version_condition = self._handle_version_attribute(
         #     serialized_attributes={} if is_delete else save_kwargs,
@@ -905,32 +951,33 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         if not is_update:
             kwargs.update(save_kwargs)
         else:
-            kwargs[stringcase.snakecase(HASH_KEY)] = save_kwargs[stringcase.snakecase(HASH_KEY)]
+            kwargs[stringcase.snakecase(HASH_KEY)] = save_kwargs[
+                stringcase.snakecase(HASH_KEY)]
             if stringcase.snakecase(RANGE_KEY) in save_kwargs:
                 kwargs[stringcase.snakecase(
                     RANGE_KEY)] = save_kwargs[stringcase.snakecase(RANGE_KEY)]
         return self.get_operation_kwargs(**kwargs)
 
-
     @classmethod
-    def get_operation_kwargs_from_class(  # pylint: disable=too-many-arguments,too-many-locals
-        cls,
-        hash_key=None,
-        range_key=None,
-        condition=None,
-        attributes_to_get=None,
-        key_condition_expression=None,
-        range_key_condition=None,
-        filter_condition=None,
-        index_name=None,
-        scan_index_forward=None,
-        limit=None,
-        last_evaluated_key=None,
-        page_size=None,
-        consistent_read=None,
-        select=None,
-        serialize=False,
-        add_identifier_map=False
+    def get_operation_kwargs_from_class(
+            # pylint: disable=too-many-arguments,too-many-locals
+            cls,
+            hash_key=None,
+            range_key=None,
+            condition=None,
+            attributes_to_get=None,
+            key_condition_expression=None,
+            range_key_condition=None,
+            filter_condition=None,
+            index_name=None,
+            scan_index_forward=None,
+            limit=None,
+            last_evaluated_key=None,
+            page_size=None,
+            consistent_read=None,
+            select=None,
+            serialize=False,
+            add_identifier_map=False
     ) -> Dict[str, Any]:
         '''
         Gets the arguments for a DB operation from a model class
@@ -958,7 +1005,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         return cls.get_operation_kwargs(**kwargs)
 
     @classmethod
-    def get_identifier_map(cls, hash_key, range_key=None, key=KEY, serialize=True):
+    def get_identifier_map(cls, hash_key, range_key=None, key=KEY,
+                           serialize=True):
         '''
         Gets a map containing the hash key or hash and range keys.
         Can be serialized with the serialize arg
@@ -967,13 +1015,14 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         hash_key = serializer.serialize(hash_key) if serialize else hash_key
         kwargs = {key: {cls.get_hash_key().attr_name: hash_key}}
         if range_key:
-            range_key = serializer.serialize(range_key) if serialize else range_key
+            range_key = serializer.serialize(
+                range_key) if serialize else range_key
             kwargs[key][cls.get_range_key().attr_name] = range_key
         return kwargs
 
     @classmethod
     def get_return_values_on_condition_failure_map(
-        cls, return_values_on_condition_failure: str
+            cls, return_values_on_condition_failure: str
     ) -> Dict:
         """
         Builds the return values map that is common to several operations
@@ -984,11 +1033,13 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
                 RETURN_VALUES_ON_CONDITION_FAILURE_VALUES
             ))
         return {
-            RETURN_VALUES_ON_CONDITION_FAILURE: str(return_values_on_condition_failure).upper()
+            RETURN_VALUES_ON_CONDITION_FAILURE: str(
+                return_values_on_condition_failure).upper()
         }
 
     @classmethod
-    def get_item_collection_map(cls, return_item_collection_metrics: str) -> Dict:
+    def get_item_collection_map(cls,
+                                return_item_collection_metrics: str) -> Dict:
         """
         Builds the item collection map
         """
@@ -1000,7 +1051,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
                 )
             )
         return {
-            RETURN_ITEM_COLL_METRICS: str(return_item_collection_metrics).upper()
+            RETURN_ITEM_COLL_METRICS: str(
+                return_item_collection_metrics).upper()
         }
 
     @classmethod
@@ -1009,7 +1061,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         Builds the return values map that is common to several operations
         """
         if return_values.upper() not in RETURN_VALUES_VALUES:
-            raise ValueError("{} must be one of {}".format(RETURN_VALUES, RETURN_VALUES_VALUES))
+            raise ValueError("{} must be one of {}".format(RETURN_VALUES,
+                                                           RETURN_VALUES_VALUES))
         return {
             RETURN_VALUES: str(return_values).upper()
         }
@@ -1031,33 +1084,34 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         }
 
     @classmethod
-    def get_operation_kwargs( # pylint: disable=too-many-branches,too-many-locals,too-many-statements,too-many-arguments
-        cls,
-        serialize: bool,
-        add_identifier_map: bool,
-        table_name: str,
-        hash_key: str,
-        range_key: Optional[str] = None,
-        key: str = KEY,
-        attributes: Optional[Any] = None,
-        attributes_to_get: Optional[Any] = None,
-        actions=None,
-        condition=None,
-        consistent_read: Optional[bool] = None,
-        return_values: Optional[str] = None,
-        return_consumed_capacity: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
-        return_values_on_condition_failure: Optional[str] = None,
-        key_condition_expression = None,
-        range_key_condition = None,
-        filter_condition = None,
-        index_name = None,
-        scan_index_forward = None,
-        limit = None,
-        last_evaluated_key = None,
-        page_size = None,
-        select=None,
-        item=None
+    def get_operation_kwargs(
+            # pylint: disable=too-many-branches,too-many-locals,too-many-statements,too-many-arguments
+            cls,
+            serialize: bool,
+            add_identifier_map: bool,
+            table_name: str,
+            hash_key: str,
+            range_key: Optional[str] = None,
+            key: str = KEY,
+            attributes: Optional[Any] = None,
+            attributes_to_get: Optional[Any] = None,
+            actions=None,
+            condition=None,
+            consistent_read: Optional[bool] = None,
+            return_values: Optional[str] = None,
+            return_consumed_capacity: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
+            return_values_on_condition_failure: Optional[str] = None,
+            key_condition_expression=None,
+            range_key_condition=None,
+            filter_condition=None,
+            index_name=None,
+            scan_index_forward=None,
+            limit=None,
+            last_evaluated_key=None,
+            page_size=None,
+            select=None,
+            item=None
     ) -> Dict:
         '''
         Prepares all arguments for a DB operation.
@@ -1088,7 +1142,8 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
                 ConditionExpressionBuilder().build_expression(condition)
             operation_kwargs[CONDITION_EXPRESSION] = condition_expression
         if key_condition_expression is not None:
-            operation_kwargs[KEY_CONDITION_EXPRESSION] = key_condition_expression
+            operation_kwargs[
+                KEY_CONDITION_EXPRESSION] = key_condition_expression
         if range_key_condition is not None:
             operation_kwargs[KEY_CONDITION_EXPRESSION] = \
                 operation_kwargs[KEY_CONDITION_EXPRESSION] & range_key_condition
@@ -1119,12 +1174,15 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         if return_values is not None:
             operation_kwargs.update(cls.get_return_values_map(return_values))
         if return_values_on_condition_failure is not None:
-            operation_kwargs.update(cls.get_return_values_on_condition_failure_map(
-                return_values_on_condition_failure))
+            operation_kwargs.update(
+                cls.get_return_values_on_condition_failure_map(
+                    return_values_on_condition_failure))
         if return_consumed_capacity is not None:
-            operation_kwargs.update(cls.get_consumed_capacity_map(return_consumed_capacity))
+            operation_kwargs.update(
+                cls.get_consumed_capacity_map(return_consumed_capacity))
         if return_item_collection_metrics is not None:
-            operation_kwargs.update(cls.get_item_collection_map(return_item_collection_metrics))
+            operation_kwargs.update(
+                cls.get_item_collection_map(return_item_collection_metrics))
         if actions is not None:
             update_expression = Update(*actions)
             # Update expressions use backwards name placeholders
@@ -1139,12 +1197,13 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         if expression_attribute_values:
             serializer = dynamo_types.TypeSerializer()
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = {
-                k: serializer.serialize(v) for k, v in expression_attribute_values.items()
+                k: serializer.serialize(v) for k, v in
+                expression_attribute_values.items()
             } if serialize else expression_attribute_values
         return operation_kwargs
 
 
-class ModelContextManager(): # pylint: disable=too-few-public-methods
+class ModelContextManager():  # pylint: disable=too-few-public-methods
     '''
     A class for managing batch operations
     '''
@@ -1180,7 +1239,8 @@ class _ModelFuture():
             for attr in self._model.to_dict():
                 # Remove the attributes from the Model that were not returned
                 # This should only be used for Gets with Projection Expressions
-                if attr not in data and getattr(self._model, attr, None) is not None:
+                if attr not in data and getattr(self._model, attr,
+                                                None) is not None:
                     delattr(self._model, attr)
         self._resolved = True
 
@@ -1194,12 +1254,12 @@ class _ModelFuture():
 
 
 class Transaction:
-
     '''
     Base class for a type of transaction operation
     '''
 
-    def __init__(self, connection, return_consumed_capacity: Optional[str] = None) -> None:
+    def __init__(self, connection,
+                 return_consumed_capacity: Optional[str] = None) -> None:
         self._connection = connection
         self._return_consumed_capacity = return_consumed_capacity
 
@@ -1271,11 +1331,12 @@ class TransactWrite(Transaction):
     '''
     Transaction Write Class
     '''
+
     def __init__(
-        self,
-        client_request_token: Optional[str] = None,
-        return_item_collection_metrics: Optional[str] = None,
-        **kwargs: Any,
+            self,
+            client_request_token: Optional[str] = None,
+            return_item_collection_metrics: Optional[str] = None,
+            **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._client_request_token: Optional[str] = client_request_token
@@ -1286,7 +1347,8 @@ class TransactWrite(Transaction):
         self._update_items: List[Dict] = []
         self._models_for_version_attribute_update: List[Any] = []
 
-    def condition_check(self, model_cls, hash_key, range_key=None, condition=None):
+    def condition_check(self, model_cls, hash_key, range_key=None,
+                        condition=None):
         '''
         Adds a condition to the transaction
         '''
@@ -1299,7 +1361,8 @@ class TransactWrite(Transaction):
             serialize=True,
             add_identifier_map=True
         )
-        self._condition_check_items.append({TRANSACT_CONDITION_CHECK: operation_kwargs})
+        self._condition_check_items.append(
+            {TRANSACT_CONDITION_CHECK: operation_kwargs})
 
     def delete(self, model, condition=None) -> None:
         '''
@@ -1312,7 +1375,8 @@ class TransactWrite(Transaction):
         )
         self._delete_items.append({TRANSACT_DELETE: operation_kwargs})
 
-    def save(self, model, condition=None, return_values: Optional[str] = None) -> None:
+    def save(self, model, condition=None,
+             return_values: Optional[str] = None) -> None:
         '''
         Adds a put_item operation to the transaction
         '''
@@ -1321,12 +1385,13 @@ class TransactWrite(Transaction):
             condition=condition,
             return_values_on_condition_failure=return_values,
             serialize=True,
-            add_identifier_map = True
+            add_identifier_map=True
         )
         self._put_items.append({TRANSACT_PUT: operation_kwargs})
         # self._models_for_version_attribute_update.append(model)
 
-    def update(self, model, actions, condition=None, return_values: Optional[str] = None) -> None:
+    def update(self, model, actions, condition=None,
+               return_values: Optional[str] = None) -> None:
         '''
         Adds an update_item operation to the transaction
         '''
@@ -1377,7 +1442,8 @@ class BatchWrite(ModelContextManager):
         '''
         if len(self.pending_operations) == self.max_operations:
             if not self.auto_commit:
-                raise ValueError("DynamoDB allows a maximum of 25 batch operations")
+                raise ValueError(
+                    "DynamoDB allows a maximum of 25 batch operations")
             self.commit()
         self.pending_operations.append({ACTION: PUT, ITEM: put_item})
 
@@ -1396,7 +1462,8 @@ class BatchWrite(ModelContextManager):
         '''
         if len(self.pending_operations) == self.max_operations:
             if not self.auto_commit:
-                raise ValueError("DynamoDB allows a maximum of 25 batch operations")
+                raise ValueError(
+                    "DynamoDB allows a maximum of 25 batch operations")
             self.commit()
         self.pending_operations.append({ACTION: DELETE, ITEM: del_item})
 
